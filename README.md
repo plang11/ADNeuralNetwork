@@ -12,4 +12,8 @@ For more hands on learning, try adding an additional hidden layer to the NN, or 
 
 For any questions with the code, please reach out to me at patricklang96 (at) gmail . com. 
 
+## Raw Data 
+* You can request the raw data using C-Path's CODR platform https://codr.c-path.org/main/applyDatabaseSelection.html 
+
+
 **Enjoy!**
