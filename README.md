@@ -3,17 +3,26 @@
 ## Instructions
 
 * Download zip file of this repository to your computer
-* Unzip and keep folder structure
-* Open code file into Rstudio & enjoy
+* Unzip
+* In the **Code** folder open the **AD Neural Network.Rmd** file 
+* Please ensure you maintain the folder structure to avoid issues with importing data
 
 ## Additional Information
 
-For more hands on learning, try adding an additional hidden layer to the NN, or trying giving it different data for a different problem and tweaking it so it works. Additionally, try splitting the data into training and test sets to better determine model accuracy
+We encourage you to explore the following 
 
-For any questions with the code, please reach out to me at patricklang96 (at) gmail . com. 
+* Re-do the model by splitting the data into training and validation, e.g. split data based on country 
+* Play around with data preprocessing
+     * Change how race or ethnicity is capture 
+     * Better ways to normalize the data 
+* Find ways to improve the model performance, you can try the following  
+     * Change the number of layers and neuron 
+     * Activations  
+
+For any questions with the data or code, please use the **Issues** section 
 
 ## Raw Data 
 * You can request the raw data using C-Path's CODR platform https://codr.c-path.org/main/applyDatabaseSelection.html 
 
 
-**Enjoy!**
+**Enjoy :)**
