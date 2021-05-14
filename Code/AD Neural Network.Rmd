@@ -24,6 +24,7 @@ library(haven)
 library(tidyverse)
 library(magrittr)
 library(ggpubr)
+library(caret)
 
 ```
 
@@ -43,22 +44,23 @@ summary(train)
 
 ## Data Preprocessing
 Data Preprocessing Steps
--Select Relevant Variables
--Assign Correct Variable Types
--Derive Dependent Variable (ADAS-COG 11)
--Remove Rows w/ Missing DV
--Calculate New Timing Variable
--Select Baseline and 3 Month Visits
--Pivot Data Wider, Creating One Row per Subject
--Remove Patients w/o BL & 3 Month Visits
--Create Binary Variables from Categorical Variables
--Normalize Continuous Variables
--Derive New DV 
--Split X and y
--Transform X into expected shape *(n_cov, n_patients)*
--One-hot Encode y from *(n_patients, 1)* to a *(n_classes, n_patients)* matrix
 
-```{r deriving variables}
+* Select Relevant Variables
+* Assign Correct Variable Types
+* Derive Dependent Variable (ADAS-COG 11)
+* Remove Rows w/ Missing DV
+* Calculate New Timing Variable
+* Select Baseline and 3 Month Visits
+* Pivot Data Wider, Creating One Row per Subject
+* Remove Patients w/o BL & 3 Month Visits
+* Create Binary Variables from Categorical Variables
+* Normalize Continuous Variables
+* Derive New DV 
+* Split X and y
+* Transform X into expected shape *(n_cov, n_patients)*
+* One-hot Encode y from *(n_patients, 1)* to a *(n_classes, n_patients)* matrix
+
+```{r Initial Data Preprocessing, include = FALSE}
 
 #Initial Data Cleaning
 train2 <- train %>%  
@@ -75,6 +77,10 @@ train2 <- train %>%
          delta_time = case_when(is.na(delta_time) ~ 0,
                                 TRUE ~ delta_time),
          time_since_first_visit = STUDY_DAY - min(STUDY_DAY))
+
+```
+
+```{r Additional Data Preprocessing and Visualization}
 
 #Data Visualization
 summary(train2)
@@ -187,16 +193,23 @@ train <- train3 %>%
 
 ```{r splitting into X and y}
 
-#reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
-X <- t(as.matrix(train %>% select(1:8)))
+train %<>%
+  mutate(improved = as.factor(improved))
 
-#X <- matrix(X, nrow=4222, ncol = 8)
+train_index <- createDataPartition(train$improved, p = 0.8, list = FALSE, times = 1)
+
+train %<>%
+  mutate(improved = as.numeric(as.character(improved)))
+
+#reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
+X <- t(as.matrix(train[train_index, ] %>% select(1:8)))
+
+X_val <- t(as.matrix(train[-train_index, ] %>% select(1:8)))
 
 #one hot encoding y as there are 10 possible classes (digits) and our output layer will contain 10 units, also reshaping to be (n_classes, n_patients)
-#only time a package is used
-y <- t(as.matrix(train %>% select(9, 10)))
+y <- t(as.matrix(train[train_index, ] %>% select(9, 10)))
 
-#y <- matrix(y, nrow=4222, ncol = 2)
+y_val <- t(as.matrix(train[-train_index, ] %>% select(9, 10)))
 
 ```
 
@@ -639,29 +652,39 @@ and returns the prediction and the true label
 ```{r testing NN}
 
 #function to show models prediction and the true label
-predict <- function(X, y, num, parameters) {
+predict <- function(X, y, parameters) {
   
-  patient <- matrix(X[,num], 8, 1)
-  truevec <- matrix(y[,num], 2, 1)
+  predictions <- matrix(nrow = ncol(X), ncol = 4)
   
-  W1 <- parameters[["W1"]]
-  b1 <- parameters[["b1"]]
-  W2 <- parameters[["W2"]]
-  b2 <- parameters[["b2"]]
-  
-  A1 <- linear_activation_fwd(patient, W1, b1, activation = "relu")
-  A2 <- linear_activation_fwd(A1[["A"]], W2, b2, activation = "sigmoid")
-  
-  predvec <- A2[["A"]]
-  pred <- if(which(predvec == max(predvec)) - 1 == 0) {pred = "patient declined"} else {pred = "patient improved"}
-  true <- if(which(truevec == max(truevec)) - 1 == 0) {pred = "patient declined"} else {pred = "patient improved"}
-  acc <- ifelse(pred == true, "correctly", "incorrectly")
-  
-  print(paste0("The Neural Network ", acc, " predicted ", pred, " and the true value is ", true))
-  
+  for(i in 1:ncol(X)) {
+    patient <- matrix(X[,i], 8, 1)
+    truevec <- matrix(y[,i], 2, 1)
+    
+    W1 <- parameters[["W1"]]
+    b1 <- parameters[["b1"]]
+    W2 <- parameters[["W2"]]
+    b2 <- parameters[["b2"]]
+    
+    A1 <- linear_activation_fwd(patient, W1, b1, activation = "relu")
+    A2 <- linear_activation_fwd(A1[["A"]], W2, b2, activation = "sigmoid")
+    
+    predvec <- A2[["A"]]
+    if(which(predvec == max(predvec)) == 1) {pred =  "patient improved"} else {pred = "patient declined"}
+    if(which(truevec == max(truevec)) == 1) {true = "patient improved"} else {true = "patient declined"}
+    acc <- ifelse(pred == true, "correctly", "incorrectly")
+    
+    predictions[i, 1] <- i
+    predictions[i, 2] <- acc
+    predictions[i, 3] <- pred
+    predictions[i, 4] <- true
+    
+  }
+  predictions <- as.tibble(predictions)
+  names(predictions) <- c("patient", "accuracy", "predicted", "true")
+  return(predictions)
 }
 
-predict(X, y, 1200, parameters)
+preds <- predict(X_val, y_val, parameters)
 
 
 ```

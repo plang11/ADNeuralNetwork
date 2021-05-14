@@ -624,16 +624,26 @@ sum_tab</code></pre>
 
 train &lt;- train3 %&gt;% 
   select(-perc_change, -month3)</code></pre>
-<pre class="r"><code>#reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
-X &lt;- t(as.matrix(train %&gt;% select(1:8)))
+<pre class="r"><code>train %&lt;&gt;%
+  mutate(improved = as.factor(improved))
 
-#X &lt;- matrix(X, nrow=4222, ncol = 8)
+train_index &lt;- createDataPartition(train$improved, p = 0.8, list = FALSE, times = 1)
+
+train %&lt;&gt;%
+  mutate(improved = as.numeric(as.character(improved)))
+
+#reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
+X &lt;- t(as.matrix(train[train_index, ] %&gt;% select(1:8)))</code></pre>
+<pre><code>## Warning: The `i` argument of ``[`()` can&#39;t be a matrix as of tibble 3.0.0.
+## Convert to a vector.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_warnings()` to see where this warning was generated.</code></pre>
+<pre class="r"><code>X_val &lt;- t(as.matrix(train[-train_index, ] %&gt;% select(1:8)))
 
 #one hot encoding y as there are 10 possible classes (digits) and our output layer will contain 10 units, also reshaping to be (n_classes, n_patients)
-#only time a package is used
-y &lt;- t(as.matrix(train %&gt;% select(9, 10)))
+y &lt;- t(as.matrix(train[train_index, ] %&gt;% select(9, 10)))
 
-#y &lt;- matrix(y, nrow=4222, ncol = 2)</code></pre>
+y_val &lt;- t(as.matrix(train[-train_index, ] %&gt;% select(9, 10)))</code></pre>
 </div>
 <div id="creating-functions-to-build-and-train-the-nn" class="section level2">
 <h2>Creating Functions to Build and Train the NN</h2>
@@ -1023,56 +1033,56 @@ two_layer_model &lt;- function(X, Y, layers_dimensions, learning_rate = .0075, n
 <div id="running-the-model" class="section level2">
 <h2>Running the Model</h2>
 <pre class="r"><code>parameters &lt;- two_layer_model(X, y, layers_dimensions, .0075, 5000, TRUE)</code></pre>
-<pre><code>## [1] 1.386274
-## [1] 1.386259
-## [1] 1.38624
-## [1] 1.386214
-## [1] 1.386177
-## [1] 1.386124
-## [1] 1.38605
-## [1] 1.385945
-## [1] 1.385803
-## [1] 1.385615
-## [1] 1.385381
-## [1] 1.385108
-## [1] 1.384817
-## [1] 1.384536
-## [1] 1.384295
-## [1] 1.384109
-## [1] 1.38398
-## [1] 1.383897
-## [1] 1.383845
-## [1] 1.383812
-## [1] 1.38379
-## [1] 1.383774
-## [1] 1.38376
-## [1] 1.383747
-## [1] 1.383735
-## [1] 1.383723
-## [1] 1.383711
-## [1] 1.383699
-## [1] 1.383687
-## [1] 1.383675
-## [1] 1.383662
-## [1] 1.38365
-## [1] 1.383637
-## [1] 1.383624
-## [1] 1.38361
-## [1] 1.383597
-## [1] 1.383583
-## [1] 1.383568
-## [1] 1.383554
-## [1] 1.383539
-## [1] 1.383524
-## [1] 1.383508
-## [1] 1.383492
-## [1] 1.383475
-## [1] 1.383459
-## [1] 1.383441
-## [1] 1.383423
-## [1] 1.383405
-## [1] 1.383386
-## [1] 1.383367</code></pre>
+<pre><code>## [1] 1.386275
+## [1] 1.38626
+## [1] 1.386242
+## [1] 1.386217
+## [1] 1.386182
+## [1] 1.386132
+## [1] 1.386061
+## [1] 1.385961
+## [1] 1.385825
+## [1] 1.385645
+## [1] 1.385419
+## [1] 1.385154
+## [1] 1.384867
+## [1] 1.384587
+## [1] 1.384343
+## [1] 1.384153
+## [1] 1.384018
+## [1] 1.38393
+## [1] 1.383875
+## [1] 1.383841
+## [1] 1.383818
+## [1] 1.383802
+## [1] 1.383788
+## [1] 1.383775
+## [1] 1.383764
+## [1] 1.383752
+## [1] 1.383741
+## [1] 1.383729
+## [1] 1.383717
+## [1] 1.383705
+## [1] 1.383693
+## [1] 1.383681
+## [1] 1.383669
+## [1] 1.383656
+## [1] 1.383643
+## [1] 1.38363
+## [1] 1.383617
+## [1] 1.383603
+## [1] 1.383589
+## [1] 1.383575
+## [1] 1.38356
+## [1] 1.383545
+## [1] 1.38353
+## [1] 1.383514
+## [1] 1.383498
+## [1] 1.383482
+## [1] 1.383465
+## [1] 1.383448
+## [1] 1.38343
+## [1] 1.383412</code></pre>
 </div>
 <div id="testing-the-nn" class="section level2">
 <h2>Testing the NN</h2>
@@ -1086,30 +1096,48 @@ It takes the inputs:</p>
 </ul>
 <p>and returns the prediction and the true label</p>
 <pre class="r"><code>#function to show models prediction and the true label
-predict &lt;- function(X, y, num, parameters) {
+predict &lt;- function(X, y, parameters) {
   
-  patient &lt;- matrix(X[,num], 8, 1)
-  truevec &lt;- matrix(y[,num], 2, 1)
+  predictions &lt;- matrix(nrow = ncol(X), ncol = 4)
   
-  W1 &lt;- parameters[[&quot;W1&quot;]]
-  b1 &lt;- parameters[[&quot;b1&quot;]]
-  W2 &lt;- parameters[[&quot;W2&quot;]]
-  b2 &lt;- parameters[[&quot;b2&quot;]]
-  
-  A1 &lt;- linear_activation_fwd(patient, W1, b1, activation = &quot;relu&quot;)
-  A2 &lt;- linear_activation_fwd(A1[[&quot;A&quot;]], W2, b2, activation = &quot;sigmoid&quot;)
-  
-  predvec &lt;- A2[[&quot;A&quot;]]
-  pred &lt;- if(which(predvec == max(predvec)) - 1 == 0) {pred = &quot;patient improved&quot;} else {pred = &quot;patient declined&quot;}
-  true &lt;- if(which(truevec == max(truevec)) - 1 == 0) {pred = &quot;patient improved&quot;} else {pred = &quot;patient declined&quot;}
-  acc &lt;- ifelse(pred == true, &quot;correctly&quot;, &quot;incorrectly&quot;)
-  
-  print(paste0(&quot;The Neural Network &quot;, acc, &quot; predicted &quot;, pred, &quot; and the true value is &quot;, true))
-  
+  for(i in 1:ncol(X)) {
+    patient &lt;- matrix(X[,i], 8, 1)
+    truevec &lt;- matrix(y[,i], 2, 1)
+    
+    W1 &lt;- parameters[[&quot;W1&quot;]]
+    b1 &lt;- parameters[[&quot;b1&quot;]]
+    W2 &lt;- parameters[[&quot;W2&quot;]]
+    b2 &lt;- parameters[[&quot;b2&quot;]]
+    
+    A1 &lt;- linear_activation_fwd(patient, W1, b1, activation = &quot;relu&quot;)
+    A2 &lt;- linear_activation_fwd(A1[[&quot;A&quot;]], W2, b2, activation = &quot;sigmoid&quot;)
+    
+    predvec &lt;- A2[[&quot;A&quot;]]
+    if(which(predvec == max(predvec)) == 1) {pred =  &quot;patient improved&quot;} else {pred = &quot;patient declined&quot;}
+    if(which(truevec == max(truevec)) == 1) {true = &quot;patient improved&quot;} else {true = &quot;patient declined&quot;}
+    acc &lt;- ifelse(pred == true, &quot;correctly&quot;, &quot;incorrectly&quot;)
+    
+    predictions[i, 1] &lt;- i
+    predictions[i, 2] &lt;- acc
+    predictions[i, 3] &lt;- pred
+    predictions[i, 4] &lt;- true
+    
+  }
+  predictions &lt;- as.tibble(predictions)
+  names(predictions) &lt;- c(&quot;patient&quot;, &quot;accuracy&quot;, &quot;predicted&quot;, &quot;true&quot;)
+  return(predictions)
 }
 
-predict(X, y, 1200, parameters)</code></pre>
-<pre><code>## [1] &quot;The Neural Network correctly predicted patient declined and the true value is patient declined&quot;</code></pre>
+preds &lt;- predict(X_val, y_val, parameters)</code></pre>
+<pre><code>## Warning: `as.tibble()` is deprecated as of tibble 2.0.0.
+## Please use `as_tibble()` instead.
+## The signature and semantics have changed, see `?as_tibble`.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_warnings()` to see where this warning was generated.</code></pre>
+<pre><code>## Warning: The `x` argument of `as_tibble.matrix()` must have column names if `.name_repair` is omitted as of tibble 2.0.0.
+## Using compatibility `.name_repair`.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_warnings()` to see where this warning was generated.</code></pre>
 </div>
 </div>
 
