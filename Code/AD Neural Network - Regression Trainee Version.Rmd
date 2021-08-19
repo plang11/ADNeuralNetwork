@@ -681,8 +681,8 @@ predict <- function(X, y, parameters) {
     W2 <- parameters[["W2"]]
     b2 <- parameters[["b2"]]
     
-    A1 <- linear_activation_fwd(patient, W1, b1, activation = "relu")
-    A2 <- linear_activation_fwd(A1[["A"]], W2, b2, activation = "sigmoid")
+    A1 <- linear_activation_fwd(patient, xxx, xxx, activation = "relu")
+    A2 <- linear_activation_fwd(A1[["A"]], xxx, xxx, activation = "sigmoid")
     
     predvec <- A2[["A"]]
     if(which(predvec == max(predvec)) == 1) {pred =  "patient improved"} else {pred = "patient declined"}
