@@ -1,0 +1,702 @@
+---
+title: "AD Neural Network"
+author: "Patrick Lang"
+date: "3/5/2021"
+output: html_document
+---
+
+# Notes
+- Planning on giving trainees train2 dataset and giving them the code to transform to binary variables to make changes if they desire
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# AD Classification Neural Network in Base R
+
+The following code shows how to create a neural network and train it. The NN that will be created has 3 layers:  
+
+* Input Layer - 8 units (8 covariates included in training)
+* Hidden Layer - 64 units (arbitrarily chosen, can be tweaked)
+* Output Layer - 2 units (represents the output classes, improved or declined)
+
+```{r loading packages, include = FALSE}
+
+#packages for data preprocessing
+library(haven)
+library(tidyverse)
+library(magrittr)
+library(ggpubr)
+library(caret)
+
+```
+
+```{r importing data}
+
+#importing data
+train <- read.csv("../Data/gainn_final.csv")
+
+```
+
+```{r data visualizations}
+
+#Viewing Data
+summary(train)
+
+```
+
+## Data Preprocessing
+Data Preprocessing Steps
+
+* Select Relevant Variables
+* Assign Correct Variable Types
+* Derive Dependent Variable (ADAS-COG 11)
+* Remove Rows w/ Missing DV
+* Calculate New Timing Variable
+* Select Baseline and 3 Month Visits
+* Pivot Data Wider, Creating One Row per Subject
+* Remove Patients w/o BL & 3 Month Visits
+* Create Binary Variables from Categorical Variables
+* Normalize Continuous Variables
+* Derive New DV 
+* Split X and y
+* Transform X into expected shape *(n_cov, n_patients)*
+* One-hot Encode y from *(n_patients, 1)* to a *(n_classes, n_patients)* matrix
+
+```{r Initial Data Preprocessing, include = FALSE}
+
+#Initial Data Cleaning
+train2 <- train %>%  
+  select(ID, AGE, SEX, RACE, ETHNIC, COUNTRY, DIAGNOSIS, VISITNUM, STUDY_DAY, M2_ITEM1:M2_ITEM9, M2_ITEM10, M2_ITEM11) %>% 
+  mutate(across(starts_with("M2"), as.numeric)) %>% 
+  mutate(STUDY_DAY = as.numeric(STUDY_DAY)) %>% 
+  rowwise() %>% 
+  mutate(DV = sum(c_across(10:20))) %>% 
+  filter(!is.na(DV)) %>% 
+  select(1:9, 21) %>% 
+  arrange(ID, STUDY_DAY) %>% 
+  group_by(ID) %>% 
+  mutate(delta_time = STUDY_DAY - lag(STUDY_DAY),
+         delta_time = case_when(is.na(delta_time) ~ 0,
+                                TRUE ~ delta_time),
+         time_since_first_visit = STUDY_DAY - min(STUDY_DAY))
+
+```
+
+```{r Additional Data Preprocessing and Visualization}
+
+#Data Visualization
+summary(train2)
+
+ggplot(train2, aes(x = DV)) + 
+  geom_histogram() +
+  theme_pubr() +
+  xlab("ADAS-COG 11 Score") +
+  ggtitle("Distribution of ADAS-COG 11 Scores")
+
+ggsave("../Figures/dv_dist.png", width = 16, height = 9, units = "cm")
+
+ggplot(train2, aes(x = time_since_first_visit)) +
+  geom_histogram() + 
+  theme_pubr() +
+  xlab("Time Since First Visit (Days)") +
+  ggtitle("Distribution of Visits")
+
+ggsave("../Figures/time_dist.png", width = 16, height = 9, units = "cm")
+
+#Data Curation
+train3 <- train2 %>% 
+  select(-VISITNUM) %>% 
+  filter(time_since_first_visit == 0 | between(time_since_first_visit, 320, 410)) %>% 
+  mutate(time = case_when(time_since_first_visit == 0 ~ "baseline",
+                          TRUE ~ "month12")) %>% 
+  distinct(ID, time, .keep_all = TRUE) %>% 
+  select(ID, AGE, SEX, RACE, ETHNIC, DIAGNOSIS, time, DV) %>% 
+  pivot_wider(names_from=time, values_from=DV) %>% 
+  filter(!is.na(baseline) & !is.na(month12)) %>% 
+  ungroup() %>% 
+  mutate(SEX = case_when(SEX == "F" ~ 0,
+                         TRUE ~ 1),
+         RACE = case_when(RACE == "WHITE" ~ 0,
+                          TRUE ~ 1),
+         ETHNIC = case_when(ETHNIC == "HISPANIC OR LATINO" ~ 1,
+                            TRUE ~ 0),
+         AD = case_when(DIAGNOSIS == "ALZHEIMER'S DISEASE" ~ 1,
+                        TRUE ~ 0),
+         MILDAD = case_when(DIAGNOSIS == "MILD TO MODERATE ALZHEIMER'S DISEASE" ~ 1,
+                            TRUE ~ 0),
+         MCI = case_when(DIAGNOSIS == "MILD COGNITIVE IMPAIRMENT" ~ 1,
+                         TRUE ~ 0)) %>% 
+  select(AGE, SEX, RACE, ETHNIC, AD, MILDAD, MCI, baseline, month12) %>% 
+  filter(AGE != 999) %>% 
+  mutate(AGE = AGE/max(AGE),
+         baseline = baseline/70,
+         month12 = month12/70) %>% 
+  rowwise() %>% 
+  mutate(perc_change = (month12 - baseline)/baseline,
+         improved = case_when(perc_change <= 0 ~ 1,
+                              TRUE ~ 0),
+         declined = case_when(perc_change > 0 ~ 1,
+                              TRUE ~ 0)) 
+
+#Visualization of Final Covariates
+ggplot(train3, aes(x = AGE*89)) +
+  geom_histogram() +
+  theme_pubr() +
+  xlab("Age at Baseline (Years)") +
+  ggtitle("Distribution of Baseline Age")
+
+ggsave("../Figures/age_dist.png", width = 16, height = 9, units = "cm")
+
+ggplot(train3, aes(x = baseline*70)) +
+  geom_histogram() +
+  theme_pubr() +
+  ggtitle("ADAS-COG 11 at Baseline") +
+  xlab("ADAS-COG 11 Score")
+
+ggsave("../Figures/baseline_dv_dist.png", width = 16, height = 9, units = "cm")
+
+ggplot(train3, aes(x = month12*70)) +
+  geom_histogram() +
+  theme_pubr() +
+  ggtitle("ADAS-COG 11 at Month 3") +
+  xlab("ADAS-COG 11 Score")
+
+ggsave("../Figures/month12_dv_dist.png", width = 16, height = 9, units = "cm")
+
+ggplot(train3, aes(x = perc_change*100)) +
+  geom_histogram() +
+  theme_pubr() +
+  ggtitle("Percent Change from Baseline") +
+  xlab("Change (%)")
+
+ggsave("../Figures/month12_dv_dist.png", width = 16, height = 9, units = "cm")
+
+sum_tab <- train3 %>% 
+  ungroup() %>% 
+  summarise(n_pat = n(),
+            n_male = sum(SEX),
+            n_non_white = sum(RACE),
+            n_hispanic_or_latino = sum(ETHNIC),
+            n_AD = sum(AD),
+            n_MILDAD = sum(MILDAD),
+            n_MCI = sum(MCI),
+            n_improved = sum(improved),
+            n_declined = sum(declined))
+
+sum_tab
+
+write_csv(sum_tab, "../Figures/summary_table.csv")
+
+
+train <- train3 
+
+```
+
+```{r splitting into X and y}
+
+train %<>%
+ mutate(improved = as.factor(improved))
+
+train_index <- createDataPartition(train$improved, p = 0.8, list = FALSE, times = 1)
+
+train %<>%
+  mutate(improved = as.numeric(as.character(improved))) %>% 
+  select(-c(improved, declined))
+
+#reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
+X <- t(as.matrix(train[train_index, ] %>% select(1:8)))
+
+X_val <- t(as.matrix(train[-train_index, ] %>% select(1:8)))
+
+#one hot encoding y as there are 10 possible classes (digits) and our output layer will contain 10 units, also reshaping to be (n_classes, n_patients)
+y <- t(as.matrix(train[train_index, ] %>% select(9, 10)))
+
+y_val <- t(as.matrix(train[-train_index, ] %>% select(9, 10)))
+
+```
+
+## Creating Functions to Build and Train the NN
+This next section of code involves creating all of the necessary functions to build and train our neural network. They go as follows:  
+
+* Parameter initialization 
+* Forward propogation 
+    + Linear forward step
+    + Activation functions (sigmoid and ReLU)   
+* Loss function 
+* Backward propogation 
+    + Linear backward step 
+    + Activation gradients (sigmoid and ReLU) 
+* Parameter updating
+
+### Initializing Parameters
+This function takes inputs:  
+
+* n_x --- size of the input layer (n_subjects)  
+* n_h --- size of the hidden layer (32)  
+* n_y --- size of the output layer (n_classes)
+
+and creates the list *parameters* that contains:  
+
+* W1 --- weight matrix of shape (n_h, n_x)  
+* b1 --- bias vector of shape (n_h, 1)  
+* W2 --- weight matrix of shape (n_y, n_h)  
+* b2 --- bias vector of shape (n_y, 1)  
+
+```{r initializing parameters}
+
+#creating function to initialize weights and biases of neural network
+initialize_parameters <- function(n_x, n_h, n_y) {
+  
+  set.seed(123)
+  
+  #n_x - size of input layer (n_subjects)
+  #n_h - size of hidden layer (n_units)
+  #n_y - size of output layer (n_classes)
+  
+  #randomly initializing weight matrices using uniform distribution and bias vectors as zero vectors
+  W1 <- matrix(runif(n_h * n_x), n_h, n_x)*.01
+  b1 <- as.vector(rep(0, n_h))
+  W2 <- matrix(runif(n_y * n_h), n_y, n_h)*.01
+  b2 <- as.vector(rep(0, n_y))
+  
+  W1 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
+  b1 <- as.vector(rep(0, xxx))
+  W2 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
+  b2 <- as.vector(rep(0, xxx))
+  
+  #W1 - weight matrix of shape (n_h, n_x)
+  #b1 - bias vector of shape (n_h, 1)
+  #W2 - weight matrix of shape (n_y, n_h)
+  #b2 - bias vector of shape (n_y, 1)
+  
+  #combining parameters into a list
+  parameters <- list("W1" = W1,
+                     "b1" = b1,
+                     "W2" = W2,
+                     "b2" = b2)
+  
+  return(parameters)
+  
+}
+
+```
+
+### Linear Forward Propogation
+This function takes inputs:  
+
+* A --- activations from previous layer (or input data) of shape (size of previous layer, n_patients)
+* W --- weight matrix of shape (size of current layer, size of previous layer)
+* b --- bias vector of shape (size of current layer, 1)  
+
+and returns the list *Z_and_cache* which contains:
+
+* Z --- output of the linear function $Z^{[l]} = W^{[l]}*A^{[l-1]}+b^{[l]}$
+* cache --- a list containing the inputs, $A, W, b$ to make back propogation more efficient
+
+```{r linear forward propogation}
+
+linear_fwd <- function(A, W, b) {
+  
+  #A -- input (activations) from previous layer (or input data): (size of previous layer, number of examples)
+  #W -- weights matrix of shape (size of current layer, size of previous layer)
+  #b -- bias vector of shape (size of the current layer, 1)
+  
+  #creating matrix Z of shape (size of previous layer, number of examples) (linear component of NN)
+  Z <- matrix((W %*% A) + b, dim(W)[1], dim(A)[2])
+  
+  #saving cache to make back propogation more efficient
+  cache <- list(A, W, b)
+  
+  #saving Z and cache into a list as R does not allow functions to return multiple variables
+  Z_and_cache <- list("Z" = Z,
+                 "cache" = cache)
+  
+  return(Z_and_cache)
+  
+}
+
+```
+
+### Sigmoid and ReLU Functions
+These functions take input $Z$, perform a non-linear "activation" function, and return a list containing: 
+
+* A --- the activation values
+* cache --- the input $Z$ stored to compute back propogation efficiently
+
+The sigmoid function is $\sigma(Z) = \sigma(W A + b) = \frac{1}{ 1 + e^{-(W A + b)}}$
+
+The Rectified Linear Unit (ReLU) function is $A = RELU(Z) = max(0, Z)$
+
+```{r sigmoid and relu functions}
+
+sigmoid <- function(Z) {
+  
+  #sigmoid function
+  sig <- 1/(1+exp(-Z))
+  
+  #saving cache to make backpropogation more efficient
+  sig_and_cache <- list("A" = sig,
+                        "cache" = Z)
+  
+  return(sig_and_cache)
+  
+}
+
+relu_func <- function(Z) {
+  
+  #rectified linear unit function
+  relu <- pmax(Z, 0) 
+  
+  #saving cache to make backpropogation more efficient
+  relu_and_cache <- list("A" = relu,
+                         "cache" = Z)
+  
+  return(relu_and_cache)
+  
+}
+
+```
+
+### Linear Activation Forward
+This function combines the Linear Forward Propogation function and the activation functions (sigmoid and ReLU) and returns the list *A_and_cache* containing:  
+
+* A --- output of the activation function
+* linear_cache --- cache from the linear forward step
+* activation_cache --- cache from the activation function
+
+The equation to produce $A^{[l]}$ here is $A^{[l]} = g(Z^{[l]}) = g(W^{[l]}*A^{[l-1]}+b^{[l]})$ where $g$ is either the sigmoid or ReLU activation function.
+
+```{r linear-activation forward propogation}
+
+linear_activation_fwd <- function(A_prev, W, b, activation) {
+  
+  #applying linear and sigmoid/relu functions to activations
+  if(activation == "sigmoid") {
+    Z_and_cache <- linear_fwd(A_prev, W, b)
+    A_and_cache <- sigmoid(Z_and_cache[["Z"]])
+    } else if(activation == "relu") {
+      Z_and_cache <- linear_fwd(A_prev, W, b)
+      A_and_cache <- relu_func(Z_and_cache[["Z"]])
+     }
+  
+  A_and_cache <- list("A" = A_and_cache[["A"]],
+                      "linear_cache" = Z_and_cache[["cache"]],
+                      "activation_cache" = A_and_cache[["cache"]])
+}
+
+```
+
+### Cost Function
+The cost function takes inputs: 
+
+* AL --- probability matrix of label predictions of shape (n_classes, n_patients)
+* Y --- true label matrix of shape (n_classes, n_patients)  
+
+and returns the cross-entropy cost.
+
+The cross-entropy cost $J$ is computed using the following formula: 
+
+$J = -\frac{1}{m} \sum\limits_{i = 1}^{m} (y^{(i)}\log\left(a^{[L] (i)}\right) + (1-y^{(i)})\log\left(1- a^{[L](i)}\right))$
+
+```{r cost function}
+
+cost_func <- function(AL, Y) {
+  
+  #cost function
+  m <- dim(Y)[2]
+  sqerror <- (Y-AL)^2
+  cost <- 1/m*sum(sqerror)
+  
+  return(cost)
+  
+} 
+
+```
+
+### Linear Backward Function
+This function takes inputs: 
+
+* dZ --- gradient of the cost with respect to the linear output of the current layer $dZ^{[l]} = \frac{\partial \mathcal{L} }{\partial Z^{[l]}}$
+* A_and_cache --- list containing *A_prev, W, b* from forward propogation in the current layer  
+
+computes the derivatives $dA^{[l]}, dW^{[l]}, db^{[l]}$ and returns the list *gradients* containing:
+
+* dA_prev --- gradient of the cost with respect to the activation of the previous layer with same shape as *A_prev*
+* dW --- gradient of the cost with respect to W of current layer with same shape as *W*
+* db --- gradient of the cost with respect to b of current layer with same shape as *b*
+
+using the following formulas:  
+
+$dA^{[l-1]} = \frac{\partial \mathcal{L} }{\partial A^{[l-1]}} = W^{[l] T} dZ^{[l]}$  
+$dW^{[l]} = \frac{\partial \mathcal{L} }{\partial W^{[l]}} = \frac{1}{m} dZ^{[l]} A^{[l-1] T}$  
+$db^{[l]} = \frac{\partial \mathcal{L} }{\partial b^{[l]}} = \frac{1}{m} \sum\limits_{i = 1}^{m} dZ^{[l](i)}$
+
+```{r linear backward}
+
+linear_backward <- function(dZ, A_and_cache) {
+  
+  #extracting things from cache
+  A_prev <- A_and_cache[[1]]
+  W <- A_and_cache[[2]]
+  b <- A_and_cache[[3]]
+  m <- dim(A_prev)[2]
+  
+  #taking derivitives
+  dW <- 1/m*(dZ %*% t(A_prev))
+  db <- 1/m*sum(dZ)
+  dA_prev <- t(W) %*% dZ
+
+  #saving gradients  
+  gradients <- list("dA_prev" = dA_prev,
+                    "dW" = dW,
+                    "db" = db)
+  
+  return(gradients)
+  
+}
+
+```
+
+### Activation Derivatives
+These functions compute the derivatives of the activation functions with inputs: 
+
+* dA --- post-activation gradient for current layer
+* cache --- either linear or activation cache that was stored for backward propogation  
+
+to return *dZ*
+
+The computation can be represented as $dZ^{[l]} = dA^{[l]} * g'(Z^{[l]})$ where $g(.)$ is the activation function
+
+```{r backwards sigmoid and relu}
+
+sigmoid_backward <- function(dA, cache) {
+  
+  #sigmoid derivative
+  Z <- cache
+  s = 1/(1+exp(-Z))
+  dZ = dA * s * (1-s)
+  
+  return(dZ)
+  
+}
+
+relu_backward <- function(dA, cache) {
+  
+  #relu derivative
+  Z <- cache
+  dZ <- dA
+  
+  dZ[Z<=0] <- 0
+  
+  return(dZ)
+  
+}
+
+```
+
+### Linear Activation Backward
+This function impliments back propogation for the linear->activation layer with inputs:
+
+* dA --- post-activation gradient for current layer
+* A_and_cache --- list containing linear_cache and activation_cache
+* activation --- which activation to use for this layer ("sigmoid" or "relu")  
+
+and returns the list *gradients* containing:
+
+* dA_prev --- gradient of the cost with respect to the activation of the previous layer with same shape as *A_prev*
+* dW --- gradient of the cost with respect to W of current layer with same shape as *W*
+* db --- gradient of the cost with respect to b of current layer with same shape as *b*
+
+```{r linear activation backward}
+
+linear_activation_back <- function(dA, A_and_cache, activation) {
+  
+  #extracting caches
+  linear_cache <- A_and_cache[["linear_cache"]]
+  activation_cache <- A_and_cache[["activation_cache"]]
+  
+  #gradient descent
+  if(activation == "relu") {
+    
+    dZ <- relu_backward(dA, activation_cache)
+    gradients <- linear_backward(dZ, linear_cache)
+    
+  } else if(activation == "sigmoid") {
+    
+    dZ <- sigmoid_backward(dA, activation_cache)
+    gradients <- linear_backward(dZ, linear_cache)
+    
+  }
+  
+  return(gradients)
+  
+}
+
+```
+
+### Updating the Parameters
+This function updates the parameters of the model using gradient descent. It takes inputs: 
+
+* parameters --- list of parameters *W1, b1, W2, b2*
+* l1_gradients --- gradients from first NN layer
+* l2_gradients --- gradients from second NN layer
+* learning_rate --- the $\alpha$ you wish to use  
+
+and returns the list *parameters* containing the updated parameters.
+
+Gradient descent works using the following equations:
+
+$W^{[l]} = W^{[l]} - \alpha \text{ } dW^{[l]}$  
+$b^{[l]} = b^{[l]} - \alpha \text{ } db^{[l]}$  
+
+```{r updating parameters}
+
+update_parameters <- function(parameters, l1_gradients, l2_gradients, learning_rate) {
+  
+  #updating parameters using learning rate and gradients
+  parameters[["W1"]] <- parameters[["W1"]] - (learning_rate * l1_gradients[[2]])
+  parameters[["b1"]] <- parameters[["b1"]] - (learning_rate * l1_gradients[[3]])
+  parameters[["W2"]] <- parameters[["W2"]] - (learning_rate * l2_gradients[[2]])
+  parameters[["b2"]] <- parameters[["b2"]] - (learning_rate * l2_gradients[[3]])
+  
+  return(parameters)
+  
+}
+
+```
+
+### Two Layer Model Function
+This function combines all previous functions into a NN function. The inputs are:
+
+* X --- baseline data from training set
+* Y --- label matrix from training set
+* layers_dimensions --- list containing *n_x, n_h, n_y*  
+
+and has the tunable parameters of:
+
+* learning_rate --- the learning rate or $\alpha$ you want to use
+* num_iterations --- number of iterations you want the model to run through while training
+* print_cost --- whether or not to print the cost after every 100 iterations
+
+This returns the list *parameters* which contains the tuned parameters *W1, b1, W2, b2*
+
+```{r two layer model}
+
+#defining the constants
+n_x <- 8
+n_h <- 64
+n_y <- 2
+
+#saving constants to a list
+layers_dimensions <- list("n_x" = n_x,
+                          "n_h" = n_h,
+                          "n_y" = n_y)
+
+#maybe have them run through a for loop that tweaks hyperparameters
+#change number of layers
+#change cost function from MSE to MAE
+
+two_layer_model <- function(X, Y, layers_dimensions, learning_rate = .0075, num_iterations = 3000, print_cost = FALSE) {
+  
+  set.seed(123)
+  m <- dim(X)[2]
+  n_x <- layers_dimensions[["n_x"]]
+  n_h <- layers_dimensions[["n_h"]]
+  n_y <- layers_dimensions[["n_y"]]
+  
+  parameters <- initialize_parameters(n_x, n_h, n_y)
+  
+  W1 <- parameters[["W1"]]
+  b1 <- parameters[["b1"]]
+  W2 <- parameters[["W2"]]
+  b2 <- parameters[["b2"]]
+  
+  for(i in 1:num_iterations) {
+    
+    A1_and_cache <- linear_activation_fwd(X, W1, b1, activation = "relu")
+    A2_and_cache <- linear_activation_fwd(A1_and_cache[["A"]], W2, b2, activation = "sigmoid")
+    
+    cost <- cost_func(A2_and_cache[["A"]], Y)
+    
+    dA2 <- -((Y/A2_and_cache[["A"]]) - ((1-Y)/(1-A2_and_cache[["A"]])))
+    
+    gradients2 <- linear_activation_back(dA2, A2_and_cache, activation = "sigmoid")
+    gradients1 <- linear_activation_back(gradients2[[1]], A1_and_cache, activation = "relu")
+    
+    parameters <- update_parameters(parameters, gradients1, gradients2, learning_rate)
+    
+    W1 <- parameters[["W1"]]
+    b1 <- parameters[["b1"]]
+    W2 <- parameters[["W2"]]
+    b2 <- parameters[["b2"]]
+    
+    if(print_cost == TRUE & i%%100 == 0) {
+      print(cost)
+    }
+    
+    
+  }
+  return(parameters)
+}
+
+```
+
+## Running the Model
+
+```{r running model}
+
+parameters <- two_layer_model(X, y, layers_dimensions, .0075, 5000, TRUE)
+
+```
+
+## Testing the NN
+As we do not currently have a separate testing set, this bit of code just gives you the opportunity to see the predicted versus actual label for a given patient in the training set was.  
+It takes the inputs:
+
+* X --- baseline data from training set
+* Y --- label matrix from training set
+* num --- number between 0 and 4222 to select a patient
+* parameters --- tuned list of parameters (output of the two_layer_model function)
+
+and returns the prediction and the true label
+
+```{r testing NN}
+
+#function to show models prediction and the true label
+predict <- function(X, y, parameters) {
+  
+  predictions <- matrix(nrow = ncol(X), ncol = 4)
+  
+  for(i in 1:ncol(X)) {
+    patient <- matrix(X[,i], 8, 1)
+    truevec <- matrix(y[,i], 2, 1)
+    
+    W1 <- parameters[["W1"]]
+    b1 <- parameters[["b1"]]
+    W2 <- parameters[["W2"]]
+    b2 <- parameters[["b2"]]
+    
+    A1 <- linear_activation_fwd(patient, W1, b1, activation = "relu")
+    A2 <- linear_activation_fwd(A1[["A"]], W2, b2, activation = "sigmoid")
+    
+    predvec <- A2[["A"]]
+    if(which(predvec == max(predvec)) == 1) {pred =  "patient improved"} else {pred = "patient declined"}
+    if(which(truevec == max(truevec)) == 1) {true = "patient improved"} else {true = "patient declined"}
+    acc <- ifelse(pred == true, "correctly", "incorrectly")
+    
+    predictions[i, 1] <- i
+    predictions[i, 2] <- acc
+    predictions[i, 3] <- pred
+    predictions[i, 4] <- true
+    
+  }
+  predictions <- as.tibble(predictions)
+  names(predictions) <- c("patient", "accuracy", "predicted", "true")
+  return(predictions)
+}
+
+preds <- predict(X_val, y_val, parameters)
+
+
+```
