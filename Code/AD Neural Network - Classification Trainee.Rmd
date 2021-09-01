@@ -5,8 +5,13 @@ date: "3/5/2021"
 output: html_document
 ---
 
-# Notes
-- Planning on giving trainees train2 dataset and giving them the code to transform to binary variables to make changes if they desire
+# Remaining Tasks
+- Add workflow figure
+- Add objective description to beginning of this file
+- Add data dictionary in this file
+- Clinical definition/diagnosis criteria for AD
+- Info on origin of dataset
+- Code for Figures and Tables to Submit
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -23,11 +28,9 @@ The following code shows how to create a neural network and train it. The NN tha
 ```{r loading packages, include = FALSE}
 
 #packages for data preprocessing
-library(haven)
 library(tidyverse)
 library(magrittr)
 library(ggpubr)
-library(caret)
 
 ```
 
@@ -189,20 +192,20 @@ sum_tab
 write_csv(sum_tab, "../Figures/summary_table.csv")
 
 
-train <- train3 
+train <- train3 %>% 
+  select(-perc_change, -month12)
 
 ```
 
 ```{r splitting into X and y}
 
 train %<>%
- mutate(improved = as.factor(improved))
+  mutate(improved = as.factor(improved))
 
 train_index <- createDataPartition(train$improved, p = 0.8, list = FALSE, times = 1)
 
 train %<>%
-  mutate(improved = as.numeric(as.character(improved))) %>% 
-  select(-c(improved, declined))
+  mutate(improved = as.numeric(as.character(improved)))
 
 #reshaping X into shape (n_pixels, n_patients), it was previously (n_patients, n_pixels)
 X <- t(as.matrix(train[train_index, ] %>% select(1:8)))
@@ -232,7 +235,7 @@ This next section of code involves creating all of the necessary functions to bu
 ### Initializing Parameters
 This function takes inputs:  
 
-* n_x --- size of the input layer (n_subjects)  
+* n_x --- size of the input layer (n_pixels)  
 * n_h --- size of the hidden layer (32)  
 * n_y --- size of the output layer (n_classes)
 
@@ -255,10 +258,10 @@ initialize_parameters <- function(n_x, n_h, n_y) {
   #n_y - size of output layer (n_classes)
   
   #randomly initializing weight matrices using uniform distribution and bias vectors as zero vectors
-  W1 <- matrix(runif(n_h * n_x), n_h, n_x)*.01
-  b1 <- as.vector(rep(0, n_h))
-  W2 <- matrix(runif(n_y * n_h), n_y, n_h)*.01
-  b2 <- as.vector(rep(0, n_y))
+  W1 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
+  b1 <- as.vector(rep(0, xxx))
+  W2 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
+  b2 <- as.vector(rep(0, xxx))
   
   #W1 - weight matrix of shape (n_h, n_x)
   #b1 - bias vector of shape (n_h, 1)
@@ -298,7 +301,7 @@ linear_fwd <- function(A, W, b) {
   #b -- bias vector of shape (size of the current layer, 1)
   
   #creating matrix Z of shape (size of previous layer, number of examples) (linear component of NN)
-  Z <- matrix((W %*% A) + b, dim(W)[1], dim(A)[2])
+  Z <- matrix((xxx %*% xxx) + xxx, dim(W)[1], dim(A)[2])
   
   #saving cache to make back propogation more efficient
   cache <- list(A, W, b)
@@ -328,7 +331,7 @@ The Rectified Linear Unit (ReLU) function is $A = RELU(Z) = max(0, Z)$
 sigmoid <- function(Z) {
   
   #sigmoid function
-  sig <- 1/(1+exp(-Z))
+  sig <- 1/(1+exp(-xxx))
   
   #saving cache to make backpropogation more efficient
   sig_and_cache <- list("A" = sig,
@@ -341,7 +344,7 @@ sigmoid <- function(Z) {
 relu_func <- function(Z) {
   
   #rectified linear unit function
-  relu <- pmax(Z, 0) 
+  relu <- pmax(xxx, 0) 
   
   #saving cache to make backpropogation more efficient
   relu_and_cache <- list("A" = relu,
@@ -368,10 +371,10 @@ linear_activation_fwd <- function(A_prev, W, b, activation) {
   
   #applying linear and sigmoid/relu functions to activations
   if(activation == "sigmoid") {
-    Z_and_cache <- linear_fwd(A_prev, W, b)
+    Z_and_cache <- linear_fwd(xxx, xxx, xxx)
     A_and_cache <- sigmoid(Z_and_cache[["Z"]])
     } else if(activation == "relu") {
-      Z_and_cache <- linear_fwd(A_prev, W, b)
+      Z_and_cache <- linear_fwd(xxx, xxx, xxx)
       A_and_cache <- relu_func(Z_and_cache[["Z"]])
      }
   
@@ -400,8 +403,8 @@ cost_func <- function(AL, Y) {
   
   #cost function
   m <- dim(Y)[2]
-  sqerror <- (Y-AL)^2
-  cost <- 1/m*sum(sqerror)
+  logprobs <- (log(AL) * Y) + (log(1-AL) * (1-Y))
+  cost <- -1/m*sum(logprobs)
   
   return(cost)
   
@@ -514,13 +517,13 @@ linear_activation_back <- function(dA, A_and_cache, activation) {
   #gradient descent
   if(activation == "relu") {
     
-    dZ <- relu_backward(dA, activation_cache)
-    gradients <- linear_backward(dZ, linear_cache)
+    dZ <- relu_backward(xxx, xxx)
+    gradients <- linear_backward(xxx, xxx)
     
   } else if(activation == "sigmoid") {
     
-    dZ <- sigmoid_backward(dA, activation_cache)
-    gradients <- linear_backward(dZ, linear_cache)
+    dZ <- sigmoid_backward(xxx, xxx)
+    gradients <- linear_backward(xxx, xxx)
     
   }
   
@@ -588,10 +591,6 @@ layers_dimensions <- list("n_x" = n_x,
                           "n_h" = n_h,
                           "n_y" = n_y)
 
-#maybe have them run through a for loop that tweaks hyperparameters
-#change number of layers
-#change cost function from MSE to MAE
-
 two_layer_model <- function(X, Y, layers_dimensions, learning_rate = .0075, num_iterations = 3000, print_cost = FALSE) {
   
   set.seed(123)
@@ -641,7 +640,7 @@ two_layer_model <- function(X, Y, layers_dimensions, learning_rate = .0075, num_
 
 ```{r running model}
 
-parameters <- two_layer_model(X, y, layers_dimensions, .0075, 5000, TRUE)
+parameters <- two_layer_model(X, y, layers_dimensions, .0075, 100, TRUE)
 
 ```
 
@@ -686,7 +685,7 @@ predict <- function(X, y, parameters) {
     predictions[i, 4] <- true
     
   }
-  predictions <- as.tibble(predictions)
+  predictions <- as_tibble(predictions)
   names(predictions) <- c("patient", "accuracy", "predicted", "true")
   return(predictions)
 }

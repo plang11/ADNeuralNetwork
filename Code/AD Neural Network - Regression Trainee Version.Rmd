@@ -1,12 +1,33 @@
 ---
 title: "AD Neural Network"
-author: "Patrick Lang"
-date: "3/5/2021"
-output: html_document
+author: "Patrick"
+date: "9/1/2021"
+output: 
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '4'
+    toc_float: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+    fig_width: 4
+    fig_height: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
 ---
 
 # Notes
 - Planning on giving trainees train2 dataset and giving them the code to transform to binary variables to make changes if they desire
+
+# Remaining Tasks
+- Add workflow figure
+- Add objective description to beginning of this file
+- Add data dictionary in this file
+- Clinical definition/diagnosis criteria for AD
+- Info on origin of dataset
+- Code for Figures and Tables to submit
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -247,6 +268,9 @@ and creates the list *parameters* that contains:
 * W2 --- weight matrix of shape (n_y, n_h)  
 * b2 --- bias vector of shape (n_y, 1)  
 
+### Tips for This Section
+
+
 ```{r initializing parameters}
 
 #creating function to initialize weights and biases of neural network
@@ -259,11 +283,6 @@ initialize_parameters <- function(n_x, n_h, n_y) {
   #n_y - size of output layer (n_classes)
   
   #randomly initializing weight matrices using uniform distribution and bias vectors as zero vectors
-  W1 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
-  b1 <- as.vector(rep(0, xxx))
-  W2 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
-  b2 <- as.vector(rep(0, xxx))
-  
   W1 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
   b1 <- as.vector(rep(0, xxx))
   W2 <- matrix(runif(xxx * xxx), xxx, xxx)*.01
@@ -704,3 +723,11 @@ preds <- predict(X_val, y_val, parameters)
 
 
 ```
+
+```{r figure generation}
+
+#template code for figures to generate after model run
+
+
+```
+
