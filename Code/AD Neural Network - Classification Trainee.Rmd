@@ -25,6 +25,16 @@ The following code shows how to create a neural network and train it. The NN tha
 * Hidden Layer - 64 units (arbitrarily chosen, can be tweaked)
 * Output Layer - 2 units (represents the output classes, improved or declined)
 
+# Overview
+
+This tutorial aims to show the building blocks of a neural network from scratch. In this code file, you will build a series of helper functions that will then be combined to build a two layer neural network to predict the ADAS-COG 11 value at 12 months given a series of baseline features. 
+
+# Clinical Diagnosis of AD
+
+Clinical criteria for the diagnosis of Alzheimer's disease include insidious onset and progressive impairment of memory and other cognitive functions. There are no motor, sensory, or coordination deficits early in the disease. The diagnosis cannot be determined by laboratory tests. These tests are important primarily in identifying other possible causes of dementia that must be excluded before the diagnosis of Alzheimer's disease may be made with confidence. Neuropsychological tests provide confirmatory evidence of the diagnosis of dementia and help to assess the course and response to therapy. The criteria proposed are intended to serve as a guide for the diagnosis of probable, possible, and definite Alzheimer's disease; these criteria will be revised as more definitive information become available.
+
+https://pubmed.ncbi.nlm.nih.gov/6610841/
+
 ```{r loading packages, include = FALSE}
 
 #packages for data preprocessing
@@ -196,6 +206,46 @@ train <- train3 %>%
   select(-perc_change, -month12)
 
 ```
+
+# Tutorial Start
+
+## Data Dictionary of train_clean.csv
+
+AGE
+-Age in Years at Baseline (standardized)
+
+SEX
+-Patient Sex (0 = Female, 1 = Male)
+
+RACE
+-Patient Race (0 = White, 1 = Non-white)
+
+ETHNIC
+-Patient Ethnicity (0 = Non Hispanic or Latino, 1 = Hispanic or Latino)
+
+AD
+-Alzheimer's Disease Diagnosis
+
+MILDAD
+-Mild Alzheimer's Disease Diagnosis
+
+MCI
+-Mild Cognitive Impairment Diagnosis
+
+baseline
+-ADAS-COG 11 Score at Baseline (standardized)
+
+month12
+-ADAS-COG 11 Score at 12 months +/- 45 days
+
+perc_change
+-Percent Change in ADAS-COG 11 score from baseline to 12 months
+
+improved
+-Improvement (reduction) in ADAS-COG 11 score from baseline to 12 months
+
+declined
+-Decline (increase) in ADAS-COG 11 score from baseline to 12 months
 
 ```{r splitting into X and y}
 
@@ -692,5 +742,14 @@ predict <- function(X, y, parameters) {
 
 preds <- predict(X_val, y_val, parameters)
 
+
+```
+
+```{r figure generation}
+
+#template code for figures to generate after model run
+
+#Current tables
+##Table of n_layers, size of layers, loss function value
 
 ```
