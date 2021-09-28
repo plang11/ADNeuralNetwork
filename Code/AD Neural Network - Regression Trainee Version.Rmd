@@ -28,6 +28,7 @@ output:
 - Clinical definition/diagnosis criteria for AD
 - Info on origin of dataset
 - Code for Figures and Tables to submit
+- Number the code file
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
